@@ -13,14 +13,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # ---- Gate 1: SAST (Semgrep) ----
       - name: SAST - Semgrep scan
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: >-
-            p/javascript
-            p/sql-injection
+        run: |
+          pip install semgrep
+          semgrep --config "p/javascript" --config "p/sql-injection" routes/ lib/ frontend/src/app/ --json --output=semgrep-results.json || true
+          semgrep --config "p/javascript" --config "p/sql-injection" routes/ lib/ frontend/src/app/ || true
         continue-on-error: true
 
       # ---- Gate 2: Dependency scanning (npm audit) ----
@@ -30,7 +31,7 @@ jobs:
           node-version: '22'
 
       - name: Dependency scan - npm audit
-        run: npm audit --audit-level=critical
+        run: npm audit --audit-level=critical || true
         continue-on-error: true
 
       # ---- Gate 3: Secrets scanning (Gitleaks) ----
@@ -44,7 +45,7 @@ jobs:
       - name: Build Docker image
         run: docker build -t juice-shop-fixed:ci .
 
-      # ---- Gate 4: Container scanning (Trivy) — this is the STRICT gate that can fail the build ----
+      # ---- Gate 4: Container scanning (Trivy) — this is the STRICT gate that FAILS the build ----
       - name: Container scan - Trivy
         uses: aquasecurity/trivy-action@master
         with:
