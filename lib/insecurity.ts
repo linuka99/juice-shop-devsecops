@@ -95,7 +95,9 @@ export const userEmailFrom = ({ headers }: any) => {
 }
 
 export const generateCoupon = (discount: number, date = new Date()) => {
-  const coupon = utils.toMMMYY(date) + '-' + discount
+  const campaign = utils.toMMMYY(date) + '-' + discount
+  const signature = crypto.createHmac('sha256', privateKey).update(campaign).digest('hex').substring(0, 16)
+  const coupon = campaign + '-' + signature
   return z85.encode(coupon)
 }
 
@@ -104,26 +106,35 @@ export const discountFromCoupon = (coupon?: string) => {
     return undefined
   }
   const decoded = z85.decode(coupon)
-  if (decoded && (hasValidFormat(decoded.toString()) != null)) {
-    const parts = decoded.toString().split('-')
-    const validity = parts[0]
-    if (utils.toMMMYY(new Date()) === validity) {
-      const discount = parts[1]
-      return parseInt(discount)
-    }
+  if (!decoded) {
+    return undefined
   }
+  const decodedString = decoded.toString()
+  const parts = decodedString.split('-')
+  if (parts.length !== 3) {
+    return undefined
+  }
+  const validity = parts[0]
+  const discount = parts[1]
+  const providedSignature = parts[2]
+
+  const campaign = validity + '-' + discount
+  const expectedSignature = crypto.createHmac('sha256', privateKey).update(campaign).digest('hex').substring(0, 16)
+
+  if (providedSignature !== expectedSignature) {
+    return undefined
+  }
+  if (utils.toMMMYY(new Date()) !== validity) {
+    return undefined
+  }
+  return parseInt(discount)
 }
 
-function hasValidFormat (coupon: string) {
-  return coupon.match(/(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[0-9]{2}-[0-9]{2}/)
-}
-
-// vuln-code-snippet start redirectCryptoCurrencyChallenge redirectChallenge
 export const redirectAllowlist = new Set([
   'https://github.com/juice-shop/juice-shop',
-  'https://blockchain.info/address/1AbKfgvw9psQ41NbLi8kufDQTezwG8DRZm', // vuln-code-snippet vuln-line redirectCryptoCurrencyChallenge
-  'https://explorer.dash.org/address/Xr556RzuwX6hg5EGpkybbv5RanJoZN17kW', // vuln-code-snippet vuln-line redirectCryptoCurrencyChallenge
-  'https://etherscan.io/address/0x0f933ab9fcaaa782d0279c300d73750e1311eae6', // vuln-code-snippet vuln-line redirectCryptoCurrencyChallenge
+  'https://blockchain.info/address/1AbKfgvw9psQ41NbLi8kufDQTezwG8DRZm',
+  'https://explorer.dash.org/address/Xr556RzuwX6hg5EGpkybbv5RanJoZN17kW',
+  'https://etherscan.io/address/0x0f933ab9fcaaa782d0279c300d73750e1311eae6',
   'http://shop.spreadshirt.com/juiceshop',
   'http://shop.spreadshirt.de/juiceshop',
   'https://www.stickeryou.com/products/owasp-juice-shop/794',
@@ -133,11 +144,10 @@ export const redirectAllowlist = new Set([
 export const isRedirectAllowed = (url: string) => {
   let allowed = false
   for (const allowedUrl of redirectAllowlist) {
-    allowed = allowed || url.includes(allowedUrl) // vuln-code-snippet vuln-line redirectChallenge
+    allowed = allowed || url.includes(allowedUrl)
   }
   return allowed
 }
-// vuln-code-snippet end redirectCryptoCurrencyChallenge redirectChallenge
 
 export const roles = {
   customer: 'customer',
