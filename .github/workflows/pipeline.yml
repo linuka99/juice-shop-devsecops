@@ -1,0 +1,54 @@
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ---- Gate 1: SAST (Semgrep) ----
+      - name: SAST - Semgrep scan
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/javascript
+            p/sql-injection
+        continue-on-error: true
+
+      # ---- Gate 2: Dependency scanning (npm audit) ----
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Dependency scan - npm audit
+        run: npm audit --audit-level=critical
+        continue-on-error: true
+
+      # ---- Gate 3: Secrets scanning (Gitleaks) ----
+      - name: Secrets scan - Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # ---- Build Docker image (needed for the container scan) ----
+      - name: Build Docker image
+        run: docker build -t juice-shop-fixed:ci .
+
+      # ---- Gate 4: Container scanning (Trivy) — this is the STRICT gate that can fail the build ----
+      - name: Container scan - Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'juice-shop-fixed:ci'
+          format: 'table'
+          severity: 'CRITICAL'
+          exit-code: '1'
