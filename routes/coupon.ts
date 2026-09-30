@@ -11,7 +11,7 @@ export function applyCoupon () {
   return async ({ params }: Request, res: Response, next: NextFunction) => {
     try {
       const id = params.id
-      let coupon: string | undefined | null = params.coupon ? decodeURIComponent(params.coupon) : undefined
+      let coupon: string | undefined | null = params.coupon ? params.coupon : undefined // Express already URL-decodes route params; decoding again crashed on '%'
       const discount = security.discountFromCoupon(coupon)
       coupon = discount ? coupon : null
 

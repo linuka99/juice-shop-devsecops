@@ -94,10 +94,28 @@ export const userEmailFrom = ({ headers }: any) => {
   return headers ? headers['x-user-email'] : undefined
 }
 
+// Coupon signing key is read from the environment (GitHub Actions secret / Vault),
+// never hardcoded in source. Fails closed if the key is missing.
+const getCouponKey = (): string => {
+  const key = process.env.COUPON_SIGNING_KEY
+  if (!key) {
+    throw new Error('COUPON_SIGNING_KEY is not set')
+  }
+  return key
+}
+
+// z85 can only encode text whose length is a multiple of 4.
+// The signature length is derived from the campaign (never from user input)
+// so the full coupon always has a valid length, for any discount value.
+const signCampaign = (campaign: string): string => {
+  const baseLength = campaign.length + 1 + 16
+  const signatureLength = 16 + ((4 - (baseLength % 4)) % 4)
+  return crypto.createHmac('sha256', getCouponKey()).update(campaign).digest('hex').substring(0, signatureLength)
+}
+
 export const generateCoupon = (discount: number, date = new Date()) => {
   const campaign = utils.toMMMYY(date) + '-' + discount
-  const signature = crypto.createHmac('sha256', privateKey).update(campaign).digest('hex').substring(0, 16)
-  const coupon = campaign + '-' + signature
+  const coupon = campaign + '-' + signCampaign(campaign)
   return z85.encode(coupon)
 }
 
@@ -116,12 +134,11 @@ export const discountFromCoupon = (coupon?: string) => {
   }
   const validity = parts[0]
   const discount = parts[1]
-  const providedSignature = parts[2]
+  const providedSignature = Buffer.from(parts[2])
+  const expectedSignature = Buffer.from(signCampaign(validity + '-' + discount))
 
-  const campaign = validity + '-' + discount
-  const expectedSignature = crypto.createHmac('sha256', privateKey).update(campaign).digest('hex').substring(0, 16)
-
-  if (providedSignature !== expectedSignature) {
+  // Constant-time comparison so attackers cannot guess the signature byte by byte via timing
+  if (providedSignature.length !== expectedSignature.length || !crypto.timingSafeEqual(providedSignature, expectedSignature)) {
     return undefined
   }
   if (utils.toMMMYY(new Date()) !== validity) {
