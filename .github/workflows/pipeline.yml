@@ -31,7 +31,7 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install --omit=dev
+        run: npm install --ignore-scripts
 
       - name: Dependency scan - npm audit
         run: npm audit --audit-level=critical || true
