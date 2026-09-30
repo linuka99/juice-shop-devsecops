@@ -1,0 +1,13 @@
+services:
+  juice-shop:
+    build: .
+    image: juice-shop-fixed:latest
+    container_name: juice-shop-fixed
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      # Coupon signing key injected at runtime from the host environment,
+      # never hardcoded. Set COUPON_SIGNING_KEY in your shell or a .env file.
+      - COUPON_SIGNING_KEY=${COUPON_SIGNING_KEY}
+    restart: unless-stopped
